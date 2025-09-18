@@ -1,0 +1,11 @@
+mlflow
+numpy
+pandas
+scikit-learn
+python-dotenv
+xgboost
+shap
+lime
+matplotlib
+seaborn
+streamlit
