@@ -28,8 +28,8 @@ def explain_shap(modelo, X_train, X_test, feature_names, output_dir='explainabil
     else:
         # For binary/classic, just take the mean absolute value
         importances = np.abs(shap_values).mean(axis=0)
-    # Ensure all importances are float scalars
-    shap_importance = {fname: float(np.ravel(val)) for fname, val in zip(feature_names, importances)}
+    # Ensure all importances are float scalars (robust: always reduce to scalar)
+    shap_importance = {fname: float(np.mean(val)) for fname, val in zip(feature_names, importances)}
     # Sort by importance
     shap_ranking = sorted(shap_importance.items(), key=lambda x: x[1], reverse=True)
     return shap_ranking, shap_importance
