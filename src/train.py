@@ -23,14 +23,14 @@ def train_xgboost(X, y, output_dir='models/', seed=23):
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=seed, stratify=y)
     param_grid = {
-        'n_estimators': [500, 1000],
-        'max_depth': [None, 10],
-        'learning_rate': [0.01, .1],
+        'n_estimators': [1000],# [500, 1000], #1000
+        'max_depth': [None],# [None, 10], #None
+        'learning_rate': [0.1],#[0.01, .1], #.1
     }
     grid = GridSearchCV(
         XGBClassifier(eval_metric='mlogloss', random_state=seed),
         param_grid=param_grid,
-        cv=3,
+        cv=2,
         scoring='f1_weighted',
         n_jobs=-1,
         verbose=2

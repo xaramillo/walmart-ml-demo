@@ -1,8 +1,10 @@
 import shap
+
 import lime.lime_tabular
-import matplotlib.pyplot as plt
+
+from sklearn.inspection import PartialDependenceDisplay
 import numpy as np
-import os
+
 
 """
 Explainability functions for multiclass classification models.
@@ -13,32 +15,29 @@ def explain_shap(modelo, X_train, X_test, feature_names, output_dir='explainabil
     """
     Generates SHAP plots (summary, force, dependence) for the model and saves them in output_dir.
     """
-    os.makedirs(output_dir, exist_ok=True)
     explainer = shap.TreeExplainer(modelo)
     shap_values = explainer.shap_values(X_test)
-    # Summary plot
-    summary_path = os.path.join(output_dir, f'shap_summary_{model_name}.png')
-    plt.figure()
-    shap.summary_plot(shap_values, X_test, feature_names=feature_names, show=False)
-    plt.tight_layout()
-    plt.savefig(summary_path)
-    plt.close()
-    # Dependence plot para la feature más importante
-    importances = np.abs(shap_values).mean(axis=0)
-    top_feature = np.argmax(importances)
-    dep_path = os.path.join(output_dir, f'shap_dependence_{model_name}.png')
-    plt.figure()
-    shap.dependence_plot(top_feature, shap_values, X_test, feature_names=feature_names, show=False)
-    plt.tight_layout()
-    plt.savefig(dep_path)
-    plt.close()
-    return [summary_path, dep_path], top_feature
+    n_features = X_test.shape[1]
+    if len(feature_names) != n_features:
+        raise ValueError(f"feature_names len: {len(feature_names)}, X_test len: {n_features} mismatch")
+    feature_names = list(feature_names)
+    # Handle multiclass: shap_values is a list of arrays (one per class)
+    if isinstance(shap_values, list):
+        # For multiclass, average the absolute SHAP values across all classes and samples
+        importances = np.mean([np.abs(sv).mean(axis=0) for sv in shap_values], axis=0)
+    else:
+        # For binary/classic, just take the mean absolute value
+        importances = np.abs(shap_values).mean(axis=0)
+    # Ensure all importances are float scalars
+    shap_importance = {fname: float(np.ravel(val)) for fname, val in zip(feature_names, importances)}
+    # Sort by importance
+    shap_ranking = sorted(shap_importance.items(), key=lambda x: x[1], reverse=True)
+    return shap_ranking, shap_importance
 
 def explain_lime(modelo, X_train, X_test, feature_names, class_names, idx=0, output_dir='explainability', model_name="XGBoost"):
     """
     Generates a local LIME explanation for one instance and saves it in output_dir.
     """
-    os.makedirs(output_dir, exist_ok=True)
     explainer = lime.lime_tabular.LimeTabularExplainer(
         training_data=np.array(X_train),
         feature_names=feature_names,
@@ -46,23 +45,20 @@ def explain_lime(modelo, X_train, X_test, feature_names, class_names, idx=0, out
         mode='classification'
     )
     exp = explainer.explain_instance(X_test[idx], modelo.predict_proba)
-    lime_path = os.path.join(output_dir, f'lime_{model_name}_idx{idx}.png')
-    fig = exp.as_pyplot_figure()
-    plt.tight_layout()
-    plt.savefig(lime_path)
-    plt.close(fig)
-    return lime_path
+    lime_explanation = exp.as_list()
+    return lime_explanation
 
 def explain_pdp(modelo, X_test, feature_names, top2_idx, output_dir='explainability', model_name="XGBoost"):
     """
     Generates PDP plots for the two most important features and saves them in output_dir.
     """
-    from sklearn.inspection import plot_partial_dependence
-    os.makedirs(output_dir, exist_ok=True)
-    pdp_path = os.path.join(output_dir, f'pdp_{model_name}.png')
-    fig, ax = plt.subplots(figsize=(8, 4))
-    plot_partial_dependence(modelo, X_test, features=top2_idx, feature_names=feature_names, ax=ax)
-    plt.tight_layout()
-    plt.savefig(pdp_path)
-    plt.close(fig)
-    return pdp_path
+    pdp_result = PartialDependenceDisplay.from_estimator(
+        modelo, X_test, features=top2_idx, feature_names=feature_names
+    )
+    # Extrae los valores PDP y los devuelve como dict
+    pdp_dict = {}
+    for i, idx in enumerate(top2_idx):
+        fname = feature_names[idx]
+        values = pdp_result.pd_lines[i][1] if hasattr(pdp_result, 'pd_lines') else None
+        pdp_dict[fname] = values
+    return pdp_dict
